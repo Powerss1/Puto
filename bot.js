@@ -1018,61 +1018,36 @@ function startBot() {
   });
 }
 
-// === PM2 KONTROLÜ VE OTOMATİK BAŞLATMA ===
-function checkAndStartWithPM2() {
-  // PM2 ile çalışıp çalışmadığını kontrol et
-  if (process.env.pm_id !== undefined) {
-    // Zaten PM2 ile çalışıyor
-    console.log(`${colors.green}✅ [PM2] Bot PM2 ile çalışıyor (ID: ${process.env.pm_id})${colors.reset}\n`);
-    showLoginScreen();
-    return;
-  }
+// === OTOMATİK YENİDEN BAŞLATMA SİSTEMİ ===
+const RESTART_DELAY = 5000; // 5 saniye
+
+function autoRestart() {
+  console.log(`${colors.yellow}🔄 [Sistem] Yeniden başlatılıyor...${colors.reset}`);
+  console.log(`${colors.cyan}⏳ [Sistem] ${RESTART_DELAY / 1000} saniye bekleniyor...${colors.reset}\n`);
   
-  // PM2 kurulu mu kontrol et
-  let pm2Installed = false;
-  try {
-    execSync('pm2 --version', { stdio: 'ignore' });
-    pm2Installed = true;
-  } catch (e) {
-    // PM2 kurulu değil
-  }
-  
-  if (!pm2Installed) {
-    // PM2 kurulu değil, normal başlat
-    console.log(`${colors.yellow}⚠️  [PM2] PM2 kurulu değil, normal mod başlatılıyor${colors.reset}`);
-    console.log(`${colors.cyan}💡 [İpucu] PM2 ile başlatmak için: npm run pm2${colors.reset}\n`);
-    showLoginScreen();
-    return;
-  }
-  
-  // PM2 kurulu, PM2 ile başlat
-  console.log(`${colors.cyan}🔄 [PM2] Bot PM2 ile başlatılıyor...${colors.reset}\n`);
-  
-  try {
-    // Önce varsa durdur
-    try {
-      execSync('pm2 delete whatsapp-bot', { stdio: 'ignore' });
-    } catch (e) {}
-    
-    // PM2 ile başlat (otomatik restart aktif)
-    const scriptPath = __filename;
-    execSync(`pm2 start "${scriptPath}" --name whatsapp-bot --time`, { stdio: 'inherit' });
-    
-    console.log(`\n${colors.green}✅ [PM2] Bot başarıyla başlatıldı!${colors.reset}`);
-    console.log(`${colors.yellow}🔄 [PM2] Otomatik yeniden başlatma: AKTIF${colors.reset}`);
-    console.log(`${colors.cyan}📊 [PM2] Komutlar:${colors.reset}`);
-    console.log(`   - Logları göster: ${colors.white}pm2 logs whatsapp-bot${colors.reset}`);
-    console.log(`   - Durumu göster: ${colors.white}pm2 status${colors.reset}`);
-    console.log(`   - Yeniden başlat: ${colors.white}pm2 restart whatsapp-bot${colors.reset}`);
-    console.log(`   - Durdur: ${colors.white}pm2 stop whatsapp-bot${colors.reset}\n`);
-    
+  setTimeout(() => {
+    const { spawn } = require('child_process');
+    const child = spawn(process.argv[0], process.argv.slice(1), {
+      detached: true,
+      stdio: 'inherit',
+      env: { ...process.env, AUTO_RESTART: 'true' }
+    });
+    child.unref();
     process.exit(0);
-  } catch (e) {
-    console.log(`${colors.red}❌ [PM2] Başlatma hatası: ${e.message}${colors.reset}`);
-    console.log(`${colors.yellow}⚠️  [PM2] Normal mod başlatılıyor...${colors.reset}\n`);
-    showLoginScreen();
-  }
+  }, RESTART_DELAY);
 }
 
+// Hata yakalama
+process.on('uncaughtException', (error) => {
+  console.error(`${colors.red}❌ [Hata] Yakalanmamış hata: ${error.message}${colors.reset}`);
+  console.error(error.stack);
+  autoRestart();
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error(`${colors.red}❌ [Hata] İşlenmeyen Promise reddi:${colors.reset}`, reason);
+  autoRestart();
+});
+
 // === BAŞLATMA ===
-checkAndStartWithPM2();
+showLoginScreen();
