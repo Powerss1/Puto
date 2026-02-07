@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 // =================================================================
-// ========== WHATSAPP AUTOMATION - LICENSED EDITION ==============
+// ========== WHATSAPP AUTOMATION - TERMUX EDITION ================
 // =================================================================
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const readline = require('readline');
+const os = require('os');
 
 // === YAPILANDIRMA ===
 const CONFIG = {
@@ -28,6 +29,11 @@ const colors = {
   green: '\x1b[92m',
   yellow: '\x1b[93m',
   red: '\x1b[91m'
+};
+
+// === TERMUX KONTROLÜ ===
+const isTermux = () => {
+  return process.env.PREFIX && process.env.PREFIX.includes('com.termux');
 };
 
 // === GRADİENT EFEKT ===
@@ -93,64 +99,12 @@ async function checkLicense() {
   return true;
 }
 
-// === GÜNCELLEME SİSTEMİ ===
-async function checkForUpdates() {
-  console.log(greyGradient("\n    📡 Güncellemeler kontrol ediliyor...", 5));
-  
-  // Yerel versiyon
-  if (!fs.existsSync('version.txt')) fs.writeFileSync('version.txt', '1.0');
-  let localVer = parseFloat(fs.readFileSync('version.txt', 'utf8'));
-  if (isNaN(localVer)) localVer = 1.0;
-  
-  // Uzak versiyon
-  const versionUrl = `https://raw.githubusercontent.com/${CONFIG.repoOwner}/${CONFIG.repoName}/${CONFIG.branch}/${CONFIG.versionFileName}`;
-  const remoteVerStr = await fetchString(versionUrl);
-  
-  if (!remoteVerStr) {
-    console.log(`    ${colors.yellow}⚠️  Sunucuya erişilemedi, güncelleme atlanıyor.${colors.reset}`);
-    return;
-  }
-  
-  const remoteVer = parseFloat(remoteVerStr);
-  
-  if (remoteVer > localVer) {
-    console.log(greyGradient(`\n    ⬇️  YENİ SÜRÜM BULUNDU: v${remoteVer} (Mevcut: v${localVer})`, 10));
-    console.log(`    ${colors.cyan}Dosyalar güncelleniyor, lütfen bekleyin...${colors.reset}\n`);
-    
-    for (const file of CONFIG.filesToUpdate) {
-      const fileUrl = `https://raw.githubusercontent.com/${CONFIG.repoOwner}/${CONFIG.repoName}/${CONFIG.branch}/${file}`;
-      process.stdout.write(`    > ${file} indiriliyor... `);
-      const success = await downloadFile(fileUrl, file);
-      if (success) console.log(`${colors.green}✅${colors.reset}`);
-      else console.log(`${colors.red}❌${colors.reset}`);
-    }
-    
-    fs.writeFileSync('version.txt', remoteVer.toString());
-    console.log(`\n    ${colors.green}✅ GÜNCELLEME TAMAMLANDI!${colors.reset}`);
-    console.log(`    ${colors.yellow}Bot yeniden başlatılıyor...${colors.reset}\n`);
-    
-    await new Promise(r => setTimeout(r, 2000));
-    
-    const { spawn } = require('child_process');
-    spawn(process.argv[0], process.argv.slice(1), { 
-      stdio: 'inherit',
-      detached: true 
-    }).unref();
-    
-    process.exit();
-  } else {
-    console.log(greyGradient(`    ✅ Sistem güncel (v${localVer})`, 15));
-  }
-}
-
-// === SESSİZ GÜNCELLEME KONTROLÜ (PM2 İÇİN) ===
+// === SESSİZ GÜNCELLEME KONTROLÜ ===
 async function checkForUpdatesQuiet() {
-  // Yerel versiyon
   if (!fs.existsSync('version.txt')) fs.writeFileSync('version.txt', '1.0');
   let localVer = parseFloat(fs.readFileSync('version.txt', 'utf8'));
   if (isNaN(localVer)) localVer = 1.0;
   
-  // Uzak versiyon
   const versionUrl = `https://raw.githubusercontent.com/${CONFIG.repoOwner}/${CONFIG.repoName}/${CONFIG.branch}/${CONFIG.versionFileName}`;
   const remoteVerStr = await fetchString(versionUrl);
   
@@ -168,14 +122,13 @@ async function checkForUpdatesQuiet() {
       const fileUrl = `https://raw.githubusercontent.com/${CONFIG.repoOwner}/${CONFIG.repoName}/${CONFIG.branch}/${file}`;
       const success = await downloadFile(fileUrl, file);
       if (success) console.log(`${colors.green}✅ [Güncelleme] ${file} indirildi${colors.reset}`);
-      else console.log(`${colors.red}❌ [Güncelleme] ${file} başarısız${colors.reset}`);
     }
     
     fs.writeFileSync('version.txt', remoteVer.toString());
     console.log(`${colors.green}✅ [Güncelleme] Tamamlandı, yeniden başlatılıyor...${colors.reset}`);
     
     await new Promise(r => setTimeout(r, 2000));
-    process.exit(0); // PM2 otomatik yeniden başlatacak
+    process.exit(0);
   } else {
     console.log(`${colors.green}✅ [Güncelleme] Sistem güncel (v${localVer})${colors.reset}`);
   }
@@ -183,12 +136,11 @@ async function checkForUpdatesQuiet() {
 
 // === GİRİŞ EKRANI ===
 async function showLoginScreen() {
-  // PM2 ile çalışıyorsa lisans ekranını atla
-  if (process.env.pm_id !== undefined) {
-    console.log(`${colors.cyan}🔄 [PM2] Otomatik başlatma modu${colors.reset}`);
+  // Otomatik mod kontrolü
+  if (process.env.AUTO_RESTART === 'true') {
+    console.log(`${colors.cyan}🔄 [Sistem] Otomatik yeniden başlatma${colors.reset}`);
     console.log(`${colors.green}✅ [Lisans] Otomatik doğrulama${colors.reset}`);
     
-    // Sessiz lisans kontrolü
     const secretUrl = `https://raw.githubusercontent.com/${CONFIG.repoOwner}/${CONFIG.repoName}/${CONFIG.branch}/${CONFIG.secretFileName}`;
     const exists = await checkFileExists(secretUrl);
     
@@ -198,16 +150,12 @@ async function showLoginScreen() {
     }
     
     console.log(`${colors.green}✅ [Lisans] Doğrulandı${colors.reset}`);
-    
-    // Sessiz güncelleme kontrolü
     await checkForUpdatesQuiet();
-    
     console.log(`${colors.cyan}🚀 [Bot] Başlatılıyor...${colors.reset}\n`);
     startBot();
     return;
   }
   
-  // Normal mod - Giriş ekranı göster
   clearScreen();
   console.log("\n\n");
   console.log(greyGradient("    ██╗    ██╗██╗  ██╗ █████╗ ████████╗███████╗ █████╗ ██████╗ ██████╗ ", 0));
@@ -216,7 +164,7 @@ async function showLoginScreen() {
   console.log(greyGradient("    ██║███╗██║██╔══██║██╔══██║   ██║   ╚════██║██╔══██║██╔═══╝ ██╔═══╝ ", 15));
   console.log(greyGradient("    ╚███╔███╔╝██║  ██║██║  ██║   ██║   ███████║██║  ██║██║     ██║     ", 20));
   console.log(greyGradient("     ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝     ", 25));
-  console.log(greyGradient("\n              WHATSAPP AUTOMATION - LICENSED EDITION", 30));
+  console.log(greyGradient("\n              WHATSAPP AUTOMATION - TERMUX EDITION", 30));
   console.log(greyGradient("              ════════════════════════════════════════\n", 35));
   
   const rl = readline.createInterface({
@@ -231,19 +179,14 @@ async function showLoginScreen() {
     }
     
     console.log(`\n    ${colors.green}✅ Giriş Başarılı!${colors.reset}`);
-    
-    // Lisans kontrolü
     await checkLicense();
-    
-    // Güncelleme kontrolü
-    await checkForUpdates();
+    await checkForUpdatesQuiet();
     
     rl.close();
     
     console.log(`\n    ${colors.cyan}🚀 Bot başlatılıyor...${colors.reset}\n`);
     await new Promise(r => setTimeout(r, 1000));
     
-    // Ana bot kodunu başlat
     startBot();
   });
 }
@@ -281,40 +224,6 @@ function checkAndInstallModules() {
   } else {
     console.log(`\n${colors.green}✅ [Sistem] Tüm modüller kurulu${colors.reset}\n`);
   }
-  
-  // Termux özel kurulum
-  const isTermux = process.env.PREFIX && process.env.PREFIX.includes('com.termux');
-  if (isTermux) {
-    console.log(`${colors.cyan}📱 [Termux] Termux ortamı algılandı${colors.reset}`);
-    
-    // Chromium kontrolü
-    let chromiumInstalled = false;
-    try {
-      execSync('which chromium-browser', { stdio: 'ignore' });
-      chromiumInstalled = true;
-      console.log(`${colors.green}✅ [Termux] Chromium kurulu${colors.reset}`);
-    } catch (e) {
-      console.log(`${colors.yellow}⚠️  [Termux] Chromium bulunamadı${colors.reset}`);
-    }
-    
-    if (!chromiumInstalled) {
-      console.log(`${colors.cyan}📦 [Termux] Chromium yükleniyor (bu birkaç dakika sürebilir)...${colors.reset}\n`);
-      try {
-        // Önce pkg'yi güncelle
-        execSync('pkg update -y', { stdio: 'inherit' });
-        // Chromium'u yükle
-        execSync('pkg install chromium -y', { stdio: 'inherit' });
-        console.log(`\n${colors.green}✅ [Termux] Chromium başarıyla yüklendi!${colors.reset}\n`);
-      } catch (err) {
-        console.log(`\n${colors.red}❌ [Termux] Chromium kurulumu başarısız!${colors.reset}`);
-        console.log(`${colors.yellow}💡 [Termux] Lütfen manuel olarak yükleyin:${colors.reset}`);
-        console.log(`${colors.white}   pkg update && pkg install chromium -y${colors.reset}\n`);
-        process.exit(1);
-      }
-    }
-    
-    console.log(`${colors.green}✅ [Termux] Kurulum tamamlandı${colors.reset}\n`);
-  }
 }
 
 // === ANA BOT KODU ===
@@ -328,7 +237,7 @@ function startBot() {
   
   const CONFIG_FILE = path.join(__dirname, 'config.json');
   const MAX_CONSOLE_LINES = 100;
-  const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 dakika
+  const SESSION_TIMEOUT = 30 * 60 * 1000;
   
   let config = {};
   try {
@@ -351,47 +260,29 @@ function startBot() {
   
   const telegramBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
   
-  // Termux kontrolü
-  const isTermux = process.env.PREFIX && process.env.PREFIX.includes('com.termux');
-  
-  let puppeteerConfig = {
-    headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--no-first-run',
-      '--no-zygote',
-      '--disable-gpu',
-      '--disable-software-rasterizer'
-    ]
-  };
-  
-  // Termux için özel ayarlar
-  if (isTermux) {
-    console.log(`${colors.cyan}📱 [Termux] Termux modu aktif${colors.reset}`);
-    
-    // Chromium yolunu bul
-    let chromiumPath = '/data/data/com.termux/files/usr/bin/chromium-browser';
-    try {
-      const result = execSync('which chromium-browser', { encoding: 'utf8' }).trim();
-      if (result) chromiumPath = result;
-    } catch (e) {}
-    
-    puppeteerConfig.executablePath = chromiumPath;
-    puppeteerConfig.args.push(
-      '--single-process',
-      '--disable-features=VizDisplayCompositor'
-    );
-    
-    console.log(`${colors.green}✅ [Termux] Chromium yolu: ${chromiumPath}${colors.reset}\n`);
-  }
+  // TERMUX İÇİN OPTİMİZE EDİLMİŞ WHATSAPP CLIENT
+  console.log(`${colors.cyan}📱 [WhatsApp] Client yapılandırılıyor...${colors.reset}`);
   
   const whatsappClient = new Client({
     authStrategy: new LocalAuth(),
-    puppeteer: puppeteerConfig
+    puppeteer: {
+      headless: true,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--single-process',
+        '--disable-gpu'
+      ]
+    }
   });
+  
+  if (isTermux()) {
+    console.log(`${colors.green}✅ [Termux] Termux modu aktif${colors.reset}`);
+  }
   
   let consoleBuffer = [];
   let userStates = {};
@@ -404,7 +295,6 @@ function startBot() {
     }
   }
   
-  // Console logging
   const originalLog = console.log;
   const originalError = console.error;
   
@@ -422,7 +312,6 @@ function startBot() {
     originalError.apply(console, args);
   };
   
-  // Helper functions
   function isAdmin(userId) {
     return userId.toString() === ADMIN_ID.toString();
   }
@@ -522,7 +411,6 @@ function startBot() {
            `📝 *Mesaj:*\n${schedule.message}`;
   }
   
-  // Keyboard builders
   function getMainKeyboard() {
     return {
       inline_keyboard: [
@@ -600,7 +488,6 @@ function startBot() {
     };
   }
   
-  // Update admin panel
   async function updateAdminPanel(chatId, messageId = null) {
     const text = getMainPanelText();
     const keyboard = getMainKeyboard();
@@ -626,7 +513,6 @@ function startBot() {
     }
   }
   
-  // WhatsApp events
   whatsappClient.on('qr', (qr) => {
     console.log('\n📱 [WhatsApp] QR Kodu:\n');
     qrcode.generate(qr, { small: true });
@@ -668,12 +554,11 @@ function startBot() {
     const data = query.data;
     
     if (!isAdmin(chatId)) {
-      await telegramBot.answerCallbackQuery(query.id, { text: '❌ Yetkisiz erişim!' });
+      await telegramBot.answerCallbackQuery(query.id, { text: '❌ Yetkisiz erişim!' }).catch(() => {});
       return;
     }
     
     try {
-      // Main menu
       if (data === 'main') {
         await telegramBot.editMessageText(getMainPanelText(), {
           chat_id: chatId,
@@ -682,15 +567,11 @@ function startBot() {
           reply_markup: getMainKeyboard()
         });
       }
-      
-      // Refresh
       else if (data === 'refresh') {
         await updateAdminPanel(chatId, messageId);
         await telegramBot.answerCallbackQuery(query.id, { text: '✅ Yenilendi!' }).catch(() => {});
         return;
       }
-      
-      // Groups list
       else if (data === 'groups') {
         await telegramBot.editMessageText(getGroupListText(), {
           chat_id: chatId,
@@ -699,16 +580,12 @@ function startBot() {
           reply_markup: getGroupsKeyboard()
         });
       }
-      
-      // Add group
       else if (data === 'add_group') {
         userStates[chatId] = { action: 'add_group_id' };
         await telegramBot.sendMessage(chatId, '📝 Grup ID\'sini girin:\n\nÖrnek: 1234567890@g.us');
         await telegramBot.answerCallbackQuery(query.id).catch(() => {});
         return;
       }
-      
-      // Group detail
       else if (data.startsWith('group_')) {
         const groupId = data.replace('group_', '');
         await telegramBot.editMessageText(getGroupDetailText(groupId), {
@@ -718,8 +595,6 @@ function startBot() {
           reply_markup: getGroupDetailKeyboard(groupId)
         });
       }
-      
-      // Delete group
       else if (data.startsWith('delete_group_')) {
         const groupId = data.replace('delete_group_', '');
         const groupName = config.groups[groupId]?.name || 'Bilinmeyen';
@@ -734,8 +609,6 @@ function startBot() {
         await telegramBot.answerCallbackQuery(query.id, { text: `✅ ${groupName} silindi!` }).catch(() => {});
         return;
       }
-      
-      // Schedules list
       else if (data.startsWith('schedules_')) {
         const groupId = data.replace('schedules_', '');
         const group = config.groups[groupId];
@@ -757,8 +630,6 @@ function startBot() {
           reply_markup: getSchedulesKeyboard(groupId)
         });
       }
-      
-      // Add schedule
       else if (data.startsWith('add_schedule_')) {
         const groupId = data.replace('add_schedule_', '');
         userStates[chatId] = { action: 'add_schedule_time', groupId };
@@ -766,8 +637,6 @@ function startBot() {
         await telegramBot.answerCallbackQuery(query.id).catch(() => {});
         return;
       }
-      
-      // Schedule detail
       else if (data.startsWith('schedule_') && !data.includes('add_') && !data.includes('edit_') && !data.includes('delete_')) {
         const parts = data.replace('schedule_', '').split('_');
         const groupId = parts[0];
@@ -780,8 +649,6 @@ function startBot() {
           reply_markup: getScheduleDetailKeyboard(groupId, scheduleIndex)
         });
       }
-      
-      // Edit schedule
       else if (data.startsWith('edit_schedule_')) {
         const parts = data.replace('edit_schedule_', '').split('_');
         const groupId = parts[0];
@@ -791,8 +658,6 @@ function startBot() {
         await telegramBot.answerCallbackQuery(query.id).catch(() => {});
         return;
       }
-      
-      // Delete schedule
       else if (data.startsWith('delete_schedule_')) {
         const parts = data.replace('delete_schedule_', '').split('_');
         const groupId = parts[0];
@@ -822,8 +687,6 @@ function startBot() {
         await telegramBot.answerCallbackQuery(query.id, { text: '✅ Zamanlama silindi!' }).catch(() => {});
         return;
       }
-      
-      // Admin panel
       else if (data === 'admin_panel') {
         if (checkAdminSession(chatId)) {
           await telegramBot.editMessageText('🔐 *Admin Panel*\n\nYönetim araçlarına erişebilirsiniz.', {
@@ -841,16 +704,12 @@ function startBot() {
           });
         }
       }
-      
-      // Admin login
       else if (data === 'admin_login') {
         userStates[chatId] = { action: 'admin_pin' };
         await telegramBot.sendMessage(chatId, '🔑 Admin PIN kodunu girin:');
         await telegramBot.answerCallbackQuery(query.id).catch(() => {});
         return;
       }
-      
-      // Console
       else if (data === 'console') {
         if (!checkAdminSession(chatId)) {
           await telegramBot.answerCallbackQuery(query.id, { text: '❌ Oturum süresi doldu!' }).catch(() => {});
@@ -887,8 +746,6 @@ function startBot() {
           }
         });
       }
-      
-      // Shutdown
       else if (data === 'shutdown') {
         if (!checkAdminSession(chatId)) {
           await telegramBot.answerCallbackQuery(query.id, { text: '❌ Oturum süresi doldu!' }).catch(() => {});
@@ -912,11 +769,7 @@ function startBot() {
       
     } catch (e) {
       console.error('Callback hatası:', e.message);
-      try {
-        await telegramBot.answerCallbackQuery(query.id, { text: '❌ Bir hata oluştu!' });
-      } catch (err) {
-        // Query çok eski, sessizce geç
-      }
+      await telegramBot.answerCallbackQuery(query.id, { text: '❌ Bir hata oluştu!' }).catch(() => {});
     }
   });
   
@@ -932,7 +785,6 @@ function startBot() {
     if (!state) return;
     
     try {
-      // Add group - ID
       if (state.action === 'add_group_id') {
         if (!text.includes('@g.us')) {
           await telegramBot.sendMessage(chatId, '❌ Geçersiz format! Grup ID\'si @g.us ile bitmelidir.\n\nÖrnek: 1234567890@g.us');
@@ -941,8 +793,6 @@ function startBot() {
         userStates[chatId] = { action: 'add_group_name', groupId: text.trim() };
         await telegramBot.sendMessage(chatId, '📝 Grup ismini girin:');
       }
-      
-      // Add group - Name
       else if (state.action === 'add_group_name') {
         config.groups[state.groupId] = {
           name: text.trim(),
@@ -953,8 +803,6 @@ function startBot() {
         await telegramBot.sendMessage(chatId, `✅ Grup eklendi: ${text.trim()}`);
         updateAdminPanel(chatId);
       }
-      
-      // Add schedule - Time
       else if (state.action === 'add_schedule_time') {
         const timeRegex = /^([0-1][0-9]|2[0-3]):([0-5][0-9])$/;
         if (!timeRegex.test(text.trim())) {
@@ -964,8 +812,6 @@ function startBot() {
         userStates[chatId] = { action: 'add_schedule_message', groupId: state.groupId, time: text.trim() };
         await telegramBot.sendMessage(chatId, '📝 Mesajı girin:');
       }
-      
-      // Add schedule - Message
       else if (state.action === 'add_schedule_message') {
         config.groups[state.groupId].schedules.push({
           time: state.time,
@@ -976,8 +822,6 @@ function startBot() {
         await telegramBot.sendMessage(chatId, `✅ Zamanlama eklendi!\n\n⏰ Saat: ${state.time}\n📝 Mesaj: ${text.substring(0, 50)}...`);
         updateAdminPanel(chatId);
       }
-      
-      // Edit schedule - Time
       else if (state.action === 'edit_schedule_time') {
         const timeRegex = /^([0-1][0-9]|2[0-3]):([0-5][0-9])$/;
         if (!timeRegex.test(text.trim())) {
@@ -992,8 +836,6 @@ function startBot() {
         };
         await telegramBot.sendMessage(chatId, '📝 Yeni mesajı girin:');
       }
-      
-      // Edit schedule - Message
       else if (state.action === 'edit_schedule_message') {
         config.groups[state.groupId].schedules[state.scheduleIndex] = {
           time: state.time,
@@ -1004,8 +846,6 @@ function startBot() {
         await telegramBot.sendMessage(chatId, `✅ Zamanlama güncellendi!\n\n⏰ Saat: ${state.time}\n📝 Mesaj: ${text.substring(0, 50)}...`);
         updateAdminPanel(chatId);
       }
-      
-      // Admin PIN
       else if (state.action === 'admin_pin') {
         if (text.trim() === ADMIN_PIN) {
           createAdminSession(chatId);
@@ -1025,7 +865,7 @@ function startBot() {
     }
   });
   
-  // Cron job - Her dakika çalışır
+  // Cron job
   cron.schedule('* * * * *', async () => {
     if (!config.whatsapp.connected) return;
     
@@ -1036,7 +876,7 @@ function startBot() {
       for (const schedule of group.schedules) {
         if (schedule.time === currentTime) {
           try {
-            await new Promise(resolve => setTimeout(resolve, 10000)); // 10 saniye bekle
+            await new Promise(resolve => setTimeout(resolve, 10000));
             await whatsappClient.sendMessage(groupId, schedule.message);
             config.stats.messagesSent++;
             saveConfig();
@@ -1053,13 +893,11 @@ function startBot() {
   console.log(`👤 [Admin] ID: ${ADMIN_ID}`);
   console.log('✅ [Sistem] Aktif\n');
   
-  // Send admin panel after 3 seconds
   setTimeout(() => {
     console.log('📤 [Telegram] Admin paneli gönderiliyor...');
     updateAdminPanel(ADMIN_ID);
   }, 3000);
   
-  // Graceful shutdown
   process.on('SIGINT', async () => {
     console.log('\n\n⏹️  [Sistem] Kapatılıyor...');
     saveConfig();
@@ -1070,8 +908,8 @@ function startBot() {
   });
 }
 
-// === OTOMATİK YENİDEN BAŞLATMA SİSTEMİ ===
-const RESTART_DELAY = 5000; // 5 saniye
+// === OTOMATİK YENİDEN BAŞLATMA ===
+const RESTART_DELAY = 5000;
 
 function autoRestart() {
   console.log(`${colors.yellow}🔄 [Sistem] Yeniden başlatılıyor...${colors.reset}`);
@@ -1089,7 +927,6 @@ function autoRestart() {
   }, RESTART_DELAY);
 }
 
-// Hata yakalama
 process.on('uncaughtException', (error) => {
   console.error(`${colors.red}❌ [Hata] Yakalanmamış hata: ${error.message}${colors.reset}`);
   console.error(error.stack);
