@@ -1,0 +1,18 @@
+{
+  "name": "whatsapp-automation",
+  "version": "2.0.0",
+  "description": "WhatsApp Otomasyon - Grup bazlı zamanlanmış mesajlaşma",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "pm2": "pm2 start bot.js --name whatsapp-bot",
+    "pm2:stop": "pm2 stop whatsapp-bot",
+    "pm2:restart": "pm2 restart whatsapp-bot",
+    "pm2:logs": "pm2 logs whatsapp-bot",
+    "pm2:delete": "pm2 delete whatsapp-bot"
+  },
+  "keywords": ["whatsapp", "telegram", "automation", "cron", "bot"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {}
+}

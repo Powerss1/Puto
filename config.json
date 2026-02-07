@@ -1,0 +1,24 @@
+{
+  "telegram": {
+    "token": "8357212422:AAFuvGXPLFybOvGfwFJwEOIsE7jbtAj3Q0g",
+    "adminId": "7550492553",
+    "adminPin": "8402"
+  },
+  "whatsapp": {
+    "connected": true
+  },
+  "groups": {},
+  "stats": {
+    "startTime": "2026-02-07T13:08:03.933Z",
+    "messagesSent": 0,
+    "lastRestart": "2026-02-07T13:41:09.517Z"
+  },
+  "adminMessages": {
+    "mainPanel": 410
+  },
+  "adminSessions": {
+    "7550492553": {
+      "loginTime": 1770471385065
+    }
+  }
+}
