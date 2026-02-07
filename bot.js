@@ -282,24 +282,38 @@ function checkAndInstallModules() {
     console.log(`\n${colors.green}✅ [Sistem] Tüm modüller kurulu${colors.reset}\n`);
   }
   
-  // PM2 kontrolü
-  console.log(`${colors.cyan}🔍 [PM2] Kontrol ediliyor...${colors.reset}`);
-  try {
-    execSync('pm2 --version', { stdio: 'ignore' });
-    console.log(`${colors.green}✅ [PM2] Kurulu${colors.reset}\n`);
-  } catch (e) {
-    console.log(`${colors.yellow}📦 [PM2] Yükleniyor...${colors.reset}`);
+  // Termux özel kurulum
+  const isTermux = process.env.PREFIX && process.env.PREFIX.includes('com.termux');
+  if (isTermux) {
+    console.log(`${colors.cyan}📱 [Termux] Termux ortamı algılandı${colors.reset}`);
+    
+    // Chromium kontrolü
+    let chromiumInstalled = false;
     try {
-      execSync('npm install -g pm2', { stdio: 'inherit' });
-      console.log(`${colors.green}✅ [PM2] Yüklendi${colors.reset}\n`);
-    } catch (err) {
+      execSync('which chromium-browser', { stdio: 'ignore' });
+      chromiumInstalled = true;
+      console.log(`${colors.green}✅ [Termux] Chromium kurulu${colors.reset}`);
+    } catch (e) {
+      console.log(`${colors.yellow}⚠️  [Termux] Chromium bulunamadı${colors.reset}`);
+    }
+    
+    if (!chromiumInstalled) {
+      console.log(`${colors.cyan}📦 [Termux] Chromium yükleniyor (bu birkaç dakika sürebilir)...${colors.reset}\n`);
       try {
-        execSync('npm install pm2', { stdio: 'inherit' });
-        console.log(`${colors.green}✅ [PM2] Yerel olarak yüklendi${colors.reset}\n`);
-      } catch (err2) {
-        console.log(`${colors.yellow}⚠️  [PM2] Kurulum başarısız${colors.reset}\n`);
+        // Önce pkg'yi güncelle
+        execSync('pkg update -y', { stdio: 'inherit' });
+        // Chromium'u yükle
+        execSync('pkg install chromium -y', { stdio: 'inherit' });
+        console.log(`\n${colors.green}✅ [Termux] Chromium başarıyla yüklendi!${colors.reset}\n`);
+      } catch (err) {
+        console.log(`\n${colors.red}❌ [Termux] Chromium kurulumu başarısız!${colors.reset}`);
+        console.log(`${colors.yellow}💡 [Termux] Lütfen manuel olarak yükleyin:${colors.reset}`);
+        console.log(`${colors.white}   pkg update && pkg install chromium -y${colors.reset}\n`);
+        process.exit(1);
       }
     }
+    
+    console.log(`${colors.green}✅ [Termux] Kurulum tamamlandı${colors.reset}\n`);
   }
 }
 
@@ -336,9 +350,47 @@ function startBot() {
   const ADMIN_PIN = config.telegram.adminPin;
   
   const telegramBot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
+  
+  // Termux kontrolü
+  const isTermux = process.env.PREFIX && process.env.PREFIX.includes('com.termux');
+  
+  let puppeteerConfig = {
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--no-first-run',
+      '--no-zygote',
+      '--disable-gpu',
+      '--disable-software-rasterizer'
+    ]
+  };
+  
+  // Termux için özel ayarlar
+  if (isTermux) {
+    console.log(`${colors.cyan}📱 [Termux] Termux modu aktif${colors.reset}`);
+    
+    // Chromium yolunu bul
+    let chromiumPath = '/data/data/com.termux/files/usr/bin/chromium-browser';
+    try {
+      const result = execSync('which chromium-browser', { encoding: 'utf8' }).trim();
+      if (result) chromiumPath = result;
+    } catch (e) {}
+    
+    puppeteerConfig.executablePath = chromiumPath;
+    puppeteerConfig.args.push(
+      '--single-process',
+      '--disable-features=VizDisplayCompositor'
+    );
+    
+    console.log(`${colors.green}✅ [Termux] Chromium yolu: ${chromiumPath}${colors.reset}\n`);
+  }
+  
   const whatsappClient = new Client({
     authStrategy: new LocalAuth(),
-    puppeteer: { headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] }
+    puppeteer: puppeteerConfig
   });
   
   let consoleBuffer = [];
